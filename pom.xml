@@ -27,5 +27,36 @@
       <version>1.3.2</version>
       <scope>provided</scope>
     </dependency>
+    <!-- Jakarta EE dependencies for Open Liberty on AKS migration (cz-java-0075) -->
+    <dependency>
+      <groupId>jakarta.platform</groupId>
+      <artifactId>jakarta.jakartaee-api</artifactId>
+      <version>9.1.0</version>
+      <scope>provided</scope>
+    </dependency>
+    <!-- cz-java-0064: Jedis Redis client for Azure Cache for Redis state externalization -->
+    <dependency>
+      <groupId>redis.clients</groupId>
+      <artifactId>jedis</artifactId>
+      <version>4.4.3</version>
+    </dependency>
+    <!-- cz-java-0081: Spring JDBC for portable DataSource replacing server-specific JNDI lookup -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-jdbc</artifactId>
+      <version>6.1.6</version>
+    </dependency>
+    <!-- cz-java-0081: Spring Context for portable @Component, @Service, @Autowired replacing server-specific EJB annotations -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-context</artifactId>
+      <version>6.1.6</version>
+    </dependency>
+    <!-- cz-java-0081: Spring Transaction for portable @Transactional replacing server-specific @TransactionAttribute -->
+    <dependency>
+      <groupId>org.springframework</groupId>
+      <artifactId>spring-tx</artifactId>
+      <version>6.1.6</version>
+    </dependency>
   </dependencies>
 </project>

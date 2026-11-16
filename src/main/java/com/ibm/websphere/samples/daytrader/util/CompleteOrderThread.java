@@ -15,9 +15,9 @@
  */
 package com.ibm.websphere.samples.daytrader.util;
 
-import javax.ejb.EJBException;
-import javax.naming.InitialContext;
-import javax.transaction.UserTransaction;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import com.ibm.websphere.samples.daytrader.TradeServices;
 import com.ibm.websphere.samples.daytrader.direct.TradeDirect;
@@ -27,45 +27,55 @@ public class CompleteOrderThread implements Runnable {
 
         final Integer orderID;
         boolean twoPhase;
+        private final PlatformTransactionManager transactionManager;
         
         
         public CompleteOrderThread (Integer id, boolean twoPhase) {
             orderID = id;
             this.twoPhase = twoPhase;
+            this.transactionManager = null;
+        }
+
+        public CompleteOrderThread (Integer id, boolean twoPhase, PlatformTransactionManager transactionManager) {
+            orderID = id;
+            this.twoPhase = twoPhase;
+            this.transactionManager = transactionManager;
         }
         
         @Override
         public void run() {
             TradeServices trade;
-            UserTransaction ut = null;
+            TransactionStatus status = null;
             
             try {
                 // TODO: Sometimes, rarely, the commit does not complete before the find in completeOrder (leads to null order)
                 // Adding delay here for now, will try to find a better solution in the future.
                 Thread.sleep(500);
-                
-                InitialContext context = new InitialContext();
-                ut = (UserTransaction) context.lookup("java:comp/UserTransaction");
-                
-                ut.begin();
-                
+
+                if (transactionManager != null) {
+                    status = transactionManager.getTransaction(new DefaultTransactionDefinition());
+                }
+
                 if (TradeConfig.getRunTimeMode() == TradeConfig.EJB3) {
-                    trade = (TradeSLSBBean) context.lookup("java:module/TradeSLSBBean");
+                    trade = new TradeSLSBBean();
                 } else {
-                    trade = new TradeDirect(); 
+                    trade = new TradeDirect();
                 }
                 
                 trade.completeOrder(orderID, twoPhase);
-                
-                ut.commit();
+
+                if (transactionManager != null && status != null) {
+                    transactionManager.commit(status);
+                }
             } catch (Exception e) {
-                
-                try {
-                    ut.rollback();
-                } catch (Exception e1) {
-                    throw new EJBException(e1);
-                } 
-                throw new EJBException(e);
+                if (transactionManager != null && status != null) {
+                    try {
+                        transactionManager.rollback(status);
+                    } catch (Exception e1) {
+                        throw new RuntimeException(e1);
+                    }
+                }
+                throw new RuntimeException(e);
             } 
         }
 }

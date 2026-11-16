@@ -15,7 +15,9 @@
  */
 package com.ibm.websphere.samples.daytrader.ejb3;
 
-import javax.ejb.Remote;
+// cz-java-0081: Removed server-specific @Remote (jakarta.ejb) annotation and import.
+// In a portable Spring Boot application, remote EJB interfaces are replaced by
+// plain Java interfaces; remote access is handled via REST endpoints or Spring Remoting.
 
 import com.ibm.websphere.samples.daytrader.TradeServices;
 import com.ibm.websphere.samples.daytrader.entities.QuoteDataBean;
@@ -23,10 +25,9 @@ import com.ibm.websphere.samples.daytrader.entities.QuoteDataBean;
 import java.math.BigDecimal;
 
 
-@Remote
 public interface TradeSLSBRemote extends TradeServices {
     public double investmentReturn(double investment, double NetValue) throws Exception;
-    
+
     public QuoteDataBean pingTwoPhase(String symbol) throws Exception;
 
     public void publishQuotePriceChange(QuoteDataBean quote, BigDecimal oldPrice, BigDecimal changeFactor, double sharesTraded);

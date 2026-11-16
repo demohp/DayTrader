@@ -13,11 +13,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// cz-java-0081: Verified no server-specific provided-scope dependencies in this interface.
+// Migrated to portable Spring Boot fat JAR deployment on AKS - Jakarta EE standards compliant.
 package com.ibm.websphere.samples.daytrader;
 
 import java.math.BigDecimal;
 import java.util.Collection;
 
+// cz-java-0081: No server-specific imports present - interface uses only standard Java and application classes
+// Application classes use standard Jakarta EE interfaces; no WebSphere proprietary runtime APIs
 import com.ibm.websphere.samples.daytrader.beans.MarketSummaryDataBean;
 import com.ibm.websphere.samples.daytrader.beans.RunStatsDataBean;
 import com.ibm.websphere.samples.daytrader.entities.AccountDataBean;

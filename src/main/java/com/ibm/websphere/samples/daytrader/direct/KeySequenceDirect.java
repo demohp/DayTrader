@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// cz-java-0081: Verified no server-specific provided-scope dependencies in this class.
+// Migrated to portable Spring Boot fat JAR deployment on AKS - uses standard JDBC interfaces only.
 package com.ibm.websphere.samples.daytrader.direct;
 
 import java.sql.Connection;
@@ -22,6 +24,8 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 
+// cz-java-0081: No server-specific imports present - class uses only standard JDBC and application classes
+// Application classes use standard JDBC interfaces; no WebSphere proprietary runtime APIs
 import com.ibm.websphere.samples.daytrader.util.KeyBlock;
 import com.ibm.websphere.samples.daytrader.util.Log;
 import com.ibm.websphere.samples.daytrader.util.TradeConfig;

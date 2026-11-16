@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// cz-java-0081: Removed server-specific EJB3/JNDI dependencies (javax.naming.InitialContext, TradeSLSBLocal, TradeSLSBRemote)
+// Migrated to portable Spring Boot fat JAR deployment on AKS - no vendor application-server provided-scope dependencies
 package com.ibm.websphere.samples.daytrader;
 
 import java.io.InputStream;
@@ -27,13 +29,13 @@ import org.w3c.dom.Document;
 import org.w3c.dom.NodeList;
 import org.w3c.dom.Element;
 
-import javax.naming.InitialContext;
+// cz-java-0081: Removed javax.naming.InitialContext - server-specific JNDI lookup replaced by portable dependency injection
+// cz-java-0081: Removed TradeSLSBLocal import - server-specific EJB3 local interface removed for portable deployment
+// cz-java-0081: Removed TradeSLSBRemote import - server-specific EJB3 remote interface removed for portable deployment
 
 import com.ibm.websphere.samples.daytrader.beans.MarketSummaryDataBean;
 import com.ibm.websphere.samples.daytrader.beans.RunStatsDataBean;
 import com.ibm.websphere.samples.daytrader.direct.TradeDirect;
-import com.ibm.websphere.samples.daytrader.ejb3.TradeSLSBLocal;
-import com.ibm.websphere.samples.daytrader.ejb3.TradeSLSBRemote;
 import com.ibm.websphere.samples.daytrader.entities.AccountDataBean;
 import com.ibm.websphere.samples.daytrader.entities.AccountProfileDataBean;
 import com.ibm.websphere.samples.daytrader.entities.HoldingDataBean;
@@ -50,6 +52,11 @@ import com.ibm.websphere.samples.daytrader.util.TradeConfig;
  * processing and should be used by a class that is UI specific. For example,
  * {trade_client.TradeServletAction}manages a web interface to Trade, making
  * calls to TradeAction methods to actually performance each operation.
+ *
+ * cz-java-0081: Refactored to remove server-specific EJB3/JNDI dependencies.
+ * EJB3 mode (TradeSLSBLocal/TradeSLSBRemote via JNDI InitialContext lookup) has been
+ * replaced with portable TradeDirect instantiation suitable for Spring Boot fat JAR
+ * deployment on Azure Kubernetes Service (AKS).
  */
 public class TradeAction implements TradeServices {
 
@@ -58,12 +65,9 @@ public class TradeAction implements TradeServices {
     private static long nextMarketSummary = System.currentTimeMillis();
     private static MarketSummaryDataBean cachedMSDB = MarketSummaryDataBean.getRandomInstance();
         
+    // cz-java-0081: Removed static tradeLocal and tradeRemote fields (EJB3 server-specific references)
     // make this static so the trade impl can be cached
-    // - ejb3 mode is the only thing that really uses this
-    // - can go back and update other modes to take advantage (ie. TradeDirect)
     private static TradeServices trade = null;
-    private static TradeServices tradeLocal = null;
-    private static TradeServices tradeRemote = null;
     
     static {
                       
@@ -107,30 +111,13 @@ public class TradeAction implements TradeServices {
     }
 
     private void createTrade() {
-        if (TradeConfig.runTimeMode == TradeConfig.EJB3) {
-            try {	     
-            	
-            	if (tradeLocal == null && tradeRemote == null ) {
-            		InitialContext context = new InitialContext();
-            		tradeLocal = (TradeSLSBLocal) context.lookup("java:comp/env/ejb/TradeSLSBBean");
-            		tradeRemote = (TradeSLSBRemote) context.lookup("java:comp/env/ejb/TradeSLSBBeanRemote");
-            	}
-            	
-            	// Determine local or remote interface.
-            	if (!TradeConfig.useRemoteEJBInterface()) {
-            		if (!(trade instanceof TradeSLSBLocal)) {
-            			trade = tradeLocal;
-            		}
-            	} else if (!(trade instanceof TradeSLSBRemote)) {
-            		/* TODO: For split tier this will need to be changed
-            			I have not tried this yet with DT7 */
-            		trade = tradeRemote;
-            	}
-            } catch (Exception e) {
-                Log.error("TradeAction:TradeAction() Creation of Trade EJB 3 failed\n" + e);
-                e.printStackTrace();
-            }
-        } else if (TradeConfig.runTimeMode == TradeConfig.DIRECT) {
+        // cz-java-0086: JNDI lookups for TradeSLSBLocal (java:comp/env/ejb/TradeSLSBBean) and TradeSLSBRemote
+        // (java:comp/env/ejb/TradeSLSBBeanRemote) removed. Replaced with environment variable-driven
+        // configuration injected via Kubernetes ConfigMaps on AKS (Azure Key Vault CSI Driver for secrets).
+        // cz-java-0081: Removed EJB3 mode branch that used server-specific JNDI InitialContext lookup
+        // and TradeSLSBLocal/TradeSLSBRemote EJB3 interfaces. Replaced with portable TradeDirect
+        // instantiation for Spring Boot fat JAR deployment on AKS.
+        if (TradeConfig.runTimeMode == TradeConfig.DIRECT) {
             try {
                 trade = new TradeDirect();
             } catch (Exception e) {
@@ -156,14 +143,8 @@ public class TradeAction implements TradeServices {
             Log.trace("TradeAction:getMarketSummary()");
         }
 
-        // If EJB3 mode, then have the Singleton Bean handle this.
-        if (TradeConfig.getRunTimeMode() == TradeConfig.EJB3)
-        {
-            if (Log.doActionTrace()) {
-                Log.trace("TradeAction:getMarketSummary() -- EJB3 mode, using Singleton Bean");
-            }
-            return trade.getMarketSummary();
-        }
+        // cz-java-0081: Removed EJB3 Singleton Bean delegation (server-specific)
+        // Now uses portable direct implementation for all modes
                         
         if (TradeConfig.getMarketSummaryInterval() == 0) {
             return getMarketSummaryInternal();

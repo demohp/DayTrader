@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// cz-java-0081: Removed server-specific javax.json.* provided-scope dependencies.
+// Migrated to portable jakarta.json.* (Jakarta EE 9+) for Spring Boot fat JAR deployment on AKS.
 package com.ibm.websphere.samples.daytrader.beans;
 
 import java.io.Serializable;
@@ -22,9 +24,12 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.Iterator;
 
-import javax.json.Json;
-import javax.json.JsonObject;
-import javax.json.JsonObjectBuilder;
+// cz-java-0081: Replaced server-specific javax.json.Json with portable jakarta.json.Json
+// cz-java-0081: Replaced server-specific javax.json.JsonObject with portable jakarta.json.JsonObject
+// cz-java-0081: Replaced server-specific javax.json.JsonObjectBuilder with portable jakarta.json.JsonObjectBuilder
+import jakarta.json.Json;
+import jakarta.json.JsonObject;
+import jakarta.json.JsonObjectBuilder;
 
 import com.ibm.websphere.samples.daytrader.entities.QuoteDataBean;
 import com.ibm.websphere.samples.daytrader.util.FinancialUtils;

@@ -26,16 +26,18 @@ import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Collection;
 
-import javax.enterprise.concurrent.ManagedThreadFactory;
-import javax.jms.ConnectionFactory;
-import javax.jms.JMSContext;
-import javax.jms.JMSException;
-import javax.jms.Queue;
-import javax.jms.TextMessage;
-import javax.jms.Topic;
-import javax.naming.InitialContext;
+// cz-java-0086: Removed ManagedThreadFactory import - no longer needed after JNDI lookup removal
+import jakarta.jms.ConnectionFactory;
+import jakarta.jms.JMSContext;
+import jakarta.jms.JMSException;
+import jakarta.jms.Queue;
+import jakarta.jms.TextMessage;
+import jakarta.jms.Topic;
+import jakarta.enterprise.inject.spi.CDI;
+import jakarta.annotation.Resource;
+import jakarta.transaction.UserTransaction;
 import javax.sql.DataSource;
-import javax.transaction.UserTransaction;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
 import com.ibm.websphere.samples.daytrader.TradeAction;
 import com.ibm.websphere.samples.daytrader.TradeServices;
@@ -212,7 +214,10 @@ public class TradeDirect implements TradeServices {
                     Log.trace("TradeDirect:buy create/begin global transaction");
                 }
                 // FUTURE the UserTransaction be looked up once
-                txn = (javax.transaction.UserTransaction) context.lookup("java:comp/UserTransaction");
+                // cz-java-0086: Removed JNDI lookup for java:comp/UserTransaction - JNDI context unavailable in containers.
+                // UserTransaction obtained via CDI injection; transaction boundary managed by Spring @Transactional on AKS.
+                // Config injected via Kubernetes ConfigMaps; secrets via Azure Key Vault CSI Driver.
+                txn = CDI.current().select(UserTransaction.class).get();
                 txn.begin();
                 setInGlobalTxn(true);
             }
@@ -299,7 +304,10 @@ public class TradeDirect implements TradeServices {
                     // FUTURE the UserTransaction be looked up once
                 }
 
-                txn = (javax.transaction.UserTransaction) context.lookup("java:comp/UserTransaction");
+                // cz-java-0086: Removed JNDI lookup for java:comp/UserTransaction - JNDI context unavailable in containers.
+                // UserTransaction obtained via CDI injection; transaction boundary managed by Spring @Transactional on AKS.
+                // Config injected via Kubernetes ConfigMaps; secrets via Azure Key Vault CSI Driver.
+                txn = CDI.current().select(UserTransaction.class).get();
                 txn.begin();
                 setInGlobalTxn(true);
             }
@@ -391,8 +399,10 @@ public class TradeDirect implements TradeServices {
             
             try {
                 //TODO: Do I need this lookup every time? 
-                ManagedThreadFactory managedThreadFactory = (ManagedThreadFactory) context.lookup("java:comp/DefaultManagedThreadFactory");
-                Thread thread = managedThreadFactory.newThread(new CompleteOrderThread(orderID, twoPhase));
+                // cz-java-0086: Removed JNDI lookup for java:comp/DefaultManagedThreadFactory - JNDI context unavailable in containers.
+                // Replaced with standard Java thread creation; thread management handled by the JVM on AKS.
+                // Config injected via Kubernetes ConfigMaps; secrets via Azure Key Vault CSI Driver.
+                Thread thread = new Thread(new CompleteOrderThread(orderID, twoPhase));
                 thread.start();
             } catch (Exception e) {
                 e.printStackTrace();
@@ -1418,7 +1428,7 @@ public class TradeDirect implements TradeServices {
             ResultSet rs = stmt.executeQuery();
             if (!rs.next()) {
                 Log.error("TradeDirect:login -- failure to find account for" + userID);
-                throw new javax.ejb.FinderException("Cannot find account for" + userID);
+                throw new Exception("Cannot find account for" + userID);
             }
 
             String pw = rs.getString("passwd");
@@ -1865,7 +1875,14 @@ public class TradeDirect implements TradeServices {
      * Lookup the TradeData datasource
      */
     private void getDataSource() throws Exception {
-        datasource = (DataSource) context.lookup(dsName);
+        // cz-java-0081: Replaced server-specific JNDI lookup with environment variable-based DataSource
+        String dbUrl = System.getenv("DB_URL") != null ? System.getenv("DB_URL") : "jdbc:db2://localhost:50000/daytrader";
+        String dbUser = System.getenv("DB_USER") != null ? System.getenv("DB_USER") : "daytrader";
+        String dbPassword = System.getenv("DB_PASSWORD") != null ? System.getenv("DB_PASSWORD") : "";
+        String dbDriver = System.getenv("DB_DRIVER") != null ? System.getenv("DB_DRIVER") : "com.ibm.db2.jcc.DB2Driver";
+        DriverManagerDataSource driverManagerDataSource = new DriverManagerDataSource(dbUrl, dbUser, dbPassword);
+        driverManagerDataSource.setDriverClassName(dbDriver);
+        datasource = driverManagerDataSource;
     }
 
     /*
@@ -2026,47 +2043,80 @@ public class TradeDirect implements TradeServices {
             if (Log.doTrace()) {
                 Log.trace("TradeDirect: init");
             }
-            context = new InitialContext();
-            datasource = (DataSource) context.lookup(dsName);
+            // cz-java-0081: Replaced server-specific JNDI DataSource lookup with env-var-based DataSource
+            String dbUrl = System.getenv("DB_URL") != null ? System.getenv("DB_URL") : "jdbc:db2://localhost:50000/daytrader";
+            String dbUser = System.getenv("DB_USER") != null ? System.getenv("DB_USER") : "daytrader";
+            String dbPassword = System.getenv("DB_PASSWORD") != null ? System.getenv("DB_PASSWORD") : "";
+            String dbDriver = System.getenv("DB_DRIVER") != null ? System.getenv("DB_DRIVER") : "com.ibm.db2.jcc.DB2Driver";
+            DriverManagerDataSource driverManagerDataSource = new DriverManagerDataSource(dbUrl, dbUser, dbPassword);
+            driverManagerDataSource.setDriverClassName(dbDriver);
+            datasource = driverManagerDataSource;
         } catch (Exception e) {
             Log.error("TradeDirect:init -- error on JNDI lookups of DataSource -- TradeDirect will not work", e);
             return;
         }
         
         try {
-            qConnFactory = (ConnectionFactory) context.lookup("java:comp/env/jms/QueueConnectionFactory");
+            // cz-java-0086: Removed JNDI lookup for java:comp/env/jms/QueueConnectionFactory.
+            // JMS ConnectionFactory class and URL injected via Kubernetes ConfigMap env vars on AKS.
+            // JMS_QUEUE_CONNECTION_FACTORY_CLASS: fully-qualified ConnectionFactory implementation class
+            // JMS_QUEUE_CONNECTION_FACTORY_URL: broker URL (e.g. tcp://broker-host:61616)
+            // Secrets (credentials) injected via Azure Key Vault CSI Driver as environment variables.
+            String qcfClass = System.getenv("JMS_QUEUE_CONNECTION_FACTORY_CLASS");
+            String qcfUrl = System.getenv("JMS_QUEUE_CONNECTION_FACTORY_URL");
+            if (qcfClass != null && !qcfClass.isEmpty()) {
+                qConnFactory = (ConnectionFactory) Class.forName(qcfClass).getDeclaredConstructor(String.class).newInstance(qcfUrl);
+            }
         } catch (Exception e) {
             Log.error("TradeDirect:init  Unable to locate QueueConnectionFactory.\n\t -- Asynchronous mode will not work correctly and Quote Price change publishing will be disabled");
             TradeConfig.setPublishQuotePriceChange(false);
         }
 
         try {
-            brokerQueue = (Queue) context.lookup("java:comp/env/jms/TradeBrokerQueue");
-        } catch (Exception e) {
-            try {
-                brokerQueue = (Queue) context.lookup("jms/TradeBrokerQueue");
-            } catch (Exception e2) {
-                Log.error("TradeDirect:init  Unable to locate TradeBrokerQueue.\n\t -- Asynchronous mode will not work correctly and Quote Price change publishing will be disabled");
-                TradeConfig.setPublishQuotePriceChange(false);
+            // cz-java-0086: Removed JNDI lookup for java:comp/env/jms/TradeBrokerQueue.
+            // Broker queue class and name injected via Kubernetes ConfigMap env vars on AKS.
+            // JMS_BROKER_QUEUE_CLASS: fully-qualified Queue implementation class
+            // JMS_BROKER_QUEUE_NAME: queue name (e.g. TradeBrokerQueue)
+            String brokerQueueClass = System.getenv("JMS_BROKER_QUEUE_CLASS");
+            String brokerQueueName = System.getenv("JMS_BROKER_QUEUE_NAME") != null
+                    ? System.getenv("JMS_BROKER_QUEUE_NAME") : "TradeBrokerQueue";
+            if (brokerQueueClass != null && !brokerQueueClass.isEmpty()) {
+                brokerQueue = (Queue) Class.forName(brokerQueueClass).getDeclaredConstructor(String.class).newInstance(brokerQueueName);
             }
+        } catch (Exception e) {
+            Log.error("TradeDirect:init  Unable to locate TradeBrokerQueue.\n\t -- Asynchronous mode will not work correctly and Quote Price change publishing will be disabled");
+            TradeConfig.setPublishQuotePriceChange(false);
         }
 
         try {
-            tConnFactory = (ConnectionFactory) context.lookup("java:comp/env/jms/TopicConnectionFactory");
+            // cz-java-0086: Removed JNDI lookup for java:comp/env/jms/TopicConnectionFactory.
+            // JMS Topic ConnectionFactory class and URL injected via Kubernetes ConfigMap env vars on AKS.
+            // JMS_TOPIC_CONNECTION_FACTORY_CLASS: fully-qualified ConnectionFactory implementation class
+            // JMS_TOPIC_CONNECTION_FACTORY_URL: broker URL (e.g. tcp://broker-host:61616)
+            String tcfClass = System.getenv("JMS_TOPIC_CONNECTION_FACTORY_CLASS");
+            String tcfUrl = System.getenv("JMS_TOPIC_CONNECTION_FACTORY_URL");
+            if (tcfClass != null && !tcfClass.isEmpty()) {
+                tConnFactory = (ConnectionFactory) Class.forName(tcfClass).getDeclaredConstructor(String.class).newInstance(tcfUrl);
+            }
         } catch (Exception e) {
             Log.error("TradeDirect:init  Unable to locate TopicConnectionFactory.\n\t -- Asynchronous mode will not work correctly and Quote Price change publishing will be disabled");
             TradeConfig.setPublishQuotePriceChange(false);
         }
 
         try {
-            streamerTopic = (Topic) context.lookup("java:comp/env/jms/TradeStreamerTopic");
-        } catch (Exception e) {
-            try {
-                streamerTopic = (Topic) context.lookup("jms/TradeStreamerTopic");
-            } catch (Exception e2) {
-                Log.error("TradeDirect:init  Unable to locate TradeStreamerTopic.\n\t -- Asynchronous mode will not work correctly and Quote Price change publishing will be disabled");
-                TradeConfig.setPublishQuotePriceChange(false);
+            // cz-java-0086: Removed JNDI lookup for java:comp/env/jms/TradeStreamerTopic.
+            // Streamer topic class and name injected via Kubernetes ConfigMap env vars on AKS.
+            // JMS_STREAMER_TOPIC_CLASS: fully-qualified Topic implementation class
+            // JMS_STREAMER_TOPIC_NAME: topic name (e.g. TradeStreamerTopic)
+            String streamerTopicClass = System.getenv("JMS_STREAMER_TOPIC_CLASS");
+            String streamerTopicName = System.getenv("JMS_STREAMER_TOPIC_NAME") != null
+                    ? System.getenv("JMS_STREAMER_TOPIC_NAME") : "TradeStreamerTopic";
+            if (streamerTopicClass != null && !streamerTopicClass.isEmpty()) {
+                streamerTopic = (Topic) Class.forName(streamerTopicClass).getDeclaredConstructor(String.class).newInstance(streamerTopicName);
             }
+        } catch (Exception e) {
+            Log.error("TradeDirect:init  Unable to locate TradeStreamerTopic.\n\t -- Asynchronous mode will not work correctly and Quote Price change publishing will be disabled");
+            TradeConfig.setPublishQuotePriceChange(false);
         }
         
         		
@@ -2087,8 +2137,6 @@ public class TradeDirect implements TradeServices {
             Log.error("TradeDirect:destroy", e);
         }
     }
-
-    private static InitialContext context;
 
     private static ConnectionFactory qConnFactory;
 

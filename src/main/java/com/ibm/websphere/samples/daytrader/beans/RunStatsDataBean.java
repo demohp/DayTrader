@@ -13,6 +13,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+// cz-java-0081: Verified no server-specific provided-scope dependencies in this bean.
+// Migrated to portable Spring Boot fat JAR deployment on AKS - no vendor application-server APIs used.
 package com.ibm.websphere.samples.daytrader.beans;
 
 import java.io.Serializable;

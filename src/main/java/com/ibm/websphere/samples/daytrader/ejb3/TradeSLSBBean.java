@@ -22,30 +22,24 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.Resource;
-import javax.ejb.EJB;
-import javax.ejb.EJBException;
-import javax.ejb.SessionContext;
-import javax.ejb.Stateless;
-import javax.ejb.TransactionAttribute;
-import javax.ejb.TransactionAttributeType;
-import javax.ejb.TransactionManagement;
-import javax.ejb.TransactionManagementType;
-import javax.enterprise.concurrent.ManagedThreadFactory;
-import javax.jms.JMSContext;
-import javax.jms.Queue;
-import javax.jms.QueueConnectionFactory;
-import javax.jms.TextMessage;
-import javax.jms.Topic;
-import javax.jms.TopicConnectionFactory;
-import javax.persistence.EntityManager;
-import javax.persistence.PersistenceContext;
-import javax.persistence.TypedQuery;
-import javax.persistence.criteria.CriteriaBuilder;
-import javax.persistence.criteria.CriteriaQuery;
-import javax.persistence.criteria.Root;
-import javax.transaction.RollbackException;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
+import jakarta.jms.JMSContext;
+import jakarta.jms.Queue;
+import jakarta.jms.QueueConnectionFactory;
+import jakarta.jms.TextMessage;
+import jakarta.jms.Topic;
+import jakarta.jms.TopicConnectionFactory;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.TypedQuery;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Root;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.ibm.websphere.samples.daytrader.TradeAction;
 //import com.ibm.websphere.samples.daytrader.TradeServices;
@@ -61,15 +55,21 @@ import com.ibm.websphere.samples.daytrader.util.FinancialUtils;
 import com.ibm.websphere.samples.daytrader.util.Log;
 import com.ibm.websphere.samples.daytrader.util.TradeConfig;
 
-@Stateless
-@TransactionAttribute(TransactionAttributeType.REQUIRED)
-@TransactionManagement(TransactionManagementType.CONTAINER)
+// cz-java-0081: Replaced server-specific @Stateless (jakarta.ejb) with portable Spring @Service.
+// cz-java-0081: Replaced @TransactionAttribute/@TransactionManagement (jakarta.ejb) with Spring @Transactional.
+// cz-java-0081: Removed @EJB (jakarta.ejb) injection; replaced with Spring @Autowired.
+// cz-java-0081: Removed @SessionContext (jakarta.ejb); replaced self-reference with direct bean lookup.
+// cz-java-0081: Removed ManagedThreadFactory (jakarta.enterprise.concurrent); replaced with standard Thread.
+// cz-java-0081: Replaced EJBException (jakarta.ejb) with RuntimeException.
+// cz-java-0081: Removed RollbackException (jakarta.transaction); replaced with Exception.
+@Service
+@Transactional
 public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
-	
-    @Resource(name = "jms/QueueConnectionFactory", authenticationType = javax.annotation.Resource.AuthenticationType.APPLICATION)
+
+    @Resource(name = "jms/QueueConnectionFactory", authenticationType = jakarta.annotation.Resource.AuthenticationType.APPLICATION)
     private QueueConnectionFactory queueConnectionFactory;
 
-    @Resource(name = "jms/TopicConnectionFactory", authenticationType = javax.annotation.Resource.AuthenticationType.APPLICATION)
+    @Resource(name = "jms/TopicConnectionFactory", authenticationType = jakarta.annotation.Resource.AuthenticationType.APPLICATION)
     private TopicConnectionFactory topicConnectionFactory;
 
     @Resource(lookup = "jms/TradeStreamerTopic")
@@ -77,31 +77,11 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
 
     @Resource(lookup = "jms/TradeBrokerQueue")
     private Queue tradeBrokerQueue;
-    
-    @Resource 
-    private ManagedThreadFactory managedThreadFactory;
-	
-    /* JBoss 
-    @Resource(name = "java:/jms/QueueConnectionFactory", authenticationType = javax.annotation.Resource.AuthenticationType.APPLICATION)
-    private QueueConnectionFactory queueConnectionFactory;
 
-    @Resource(name = "java:/jms/TopicConnectionFactory", authenticationType = javax.annotation.Resource.AuthenticationType.APPLICATION)
-    private TopicConnectionFactory topicConnectionFactory;
-
-    @Resource(lookup = "java:/jms/TradeStreamerTopic")
-    private Topic tradeStreamerTopic;
-        
-    @Resource(lookup = "java:/jms/TradeBrokerQueue")
-    private Queue tradeBrokerQueue;
-    */
-    
     @PersistenceContext
     private EntityManager entityManager;
 
-    @Resource
-    private SessionContext context;
-    
-    @EJB
+    @Autowired
     MarketSummarySingleton marketSummarySingleton;
 
     /** Creates a new instance of TradeSLSBBean */
@@ -129,7 +109,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             if (Log.doTrace()) {
                 Log.trace("TradeSLSBBean:buy", userID, symbol, quantity, orderProcessingMode);
             }
-            
+
             AccountProfileDataBean profile = entityManager.find(AccountProfileDataBean.class, userID);
             AccountDataBean account = profile.getAccount();
             QuoteDataBean quote = entityManager.find(QuoteDataBean.class, symbol);
@@ -137,15 +117,15 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             // this buy order
 
             order = createOrder(account, quote, holding, "buy", quantity);
-                      
+
             // UPDATE - account should be credited during completeOrder
             BigDecimal price = quote.getPrice();
             BigDecimal orderFee = order.getOrderFee();
             BigDecimal balance = account.getBalance();
             total = (new BigDecimal(quantity).multiply(price)).add(orderFee);
             account.setBalance(balance.subtract(total));
-            final Integer orderID=order.getOrderID(); 
-            
+            final Integer orderID = order.getOrderID();
+
             if (orderProcessingMode == TradeConfig.SYNCH) {
                 completeOrder(orderID, false);
             } else {
@@ -157,7 +137,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             /* On exception - cancel the order */
             // TODO figure out how to do this with JPA
             // if (order != null) order.cancel();
-            throw new EJBException(e);
+            throw new RuntimeException(e);
         }
         return order;
     }
@@ -170,12 +150,12 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             if (Log.doTrace()) {
                 Log.trace("TradeSLSBBean:sell", userID, holdingID, orderProcessingMode);
             }
-            
+
             AccountProfileDataBean profile = entityManager.find(AccountProfileDataBean.class, userID);
             AccountDataBean account = profile.getAccount();
 
             HoldingDataBean holding = entityManager.find(HoldingDataBean.class, holdingID);
-            
+
             if (holding == null) {
                 Log.error("TradeSLSBBean:sell User " + userID + " attempted to sell holding " + holdingID + " which has already been sold");
 
@@ -201,7 +181,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             BigDecimal balance = account.getBalance();
             total = (new BigDecimal(quantity).multiply(price)).subtract(orderFee);
             account.setBalance(balance.add(total));
-            final Integer orderID=order.getOrderID();
+            final Integer orderID = order.getOrderID();
 
             if (orderProcessingMode == TradeConfig.SYNCH) {
                 completeOrder(orderID, false);
@@ -214,7 +194,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             Log.error("TradeSLSBBean:sell(" + userID + "," + holdingID + ") --> failed", e);
             // if (order != null) order.cancel();
             // UPDATE - handle all exceptions like:
-            throw new EJBException("TradeSLSBBean:sell(" + userID + "," + holdingID + ")", e);
+            throw new RuntimeException("TradeSLSBBean:sell(" + userID + "," + holdingID + ")", e);
         }
         return order;
     }
@@ -224,15 +204,14 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
         if (Log.doTrace()) {
             Log.trace("TradeSLSBBean:queueOrder", orderID);
         }
-                	
+
         if (TradeConfig.getOrderProcessingMode() == TradeConfig.ASYNCH_MANAGEDTHREAD) {
-        
-            Thread thread = managedThreadFactory.newThread(new CompleteOrderThread(orderID, twoPhase));
-            
+            // cz-java-0081: Replaced ManagedThreadFactory (jakarta.enterprise.concurrent) with standard Thread.
+            Thread thread = new Thread(new CompleteOrderThread(orderID, twoPhase));
             thread.start();
-        
+
         } else {
-        
+
             try (JMSContext queueContext = queueConnectionFactory.createContext();) {
                 TextMessage message = queueContext.createTextMessage();
 
@@ -241,11 +220,11 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
                 message.setBooleanProperty("twoPhase", twoPhase);
                 message.setText("neworder: orderID=" + orderID + " runtimeMode=EJB twoPhase=" + twoPhase);
                 message.setLongProperty("publishTime", System.currentTimeMillis());
-        		        		
+
                 queueContext.createProducer().send(tradeBrokerQueue, message);
-        		
+
             } catch (Exception e) {
-                throw new EJBException(e.getMessage(), e); // pass the exception
+                throw new RuntimeException(e.getMessage(), e); // pass the exception
             }
         }
     }
@@ -254,18 +233,18 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
     public OrderDataBean completeOrder(Integer orderID, boolean twoPhase) throws Exception {
         if (Log.doTrace()) {
             Log.trace("TradeSLSBBean:completeOrder", orderID + " twoPhase=" + twoPhase);
-        }  
-              
-        OrderDataBean order = entityManager.find(OrderDataBean.class, orderID);
-        
-        if (order == null) {
-            throw new EJBException("Error: attempt to complete Order that is null\n" + order);
         }
-        
+
+        OrderDataBean order = entityManager.find(OrderDataBean.class, orderID);
+
+        if (order == null) {
+            throw new RuntimeException("Error: attempt to complete Order that is null\n" + order);
+        }
+
         order.getQuote();
 
         if (order.isCompleted()) {
-            throw new EJBException("Error: attempt to complete Order that is already completed\n" + order);
+            throw new RuntimeException("Error: attempt to complete Order that is already completed\n" + order);
         }
 
         AccountDataBean account = order.getAccount();
@@ -299,13 +278,13 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             if (holding == null) {
                 //Log.error("TradeSLSBBean:completeOrder -- Unable to sell order " + order.getOrderID() + " holding already sold");
                 order.cancel();
-                throw new EJBException("TradeSLSBBean:completeOrder -- Unable to sell order " + order.getOrderID() + " holding already sold");
+                throw new RuntimeException("TradeSLSBBean:completeOrder -- Unable to sell order " + order.getOrderID() + " holding already sold");
             } else {
                 entityManager.remove(holding);
                 order.setHolding(null);
             }
-            
-            
+
+
         }
         order.setOrderStatus("closed");
 
@@ -322,8 +301,8 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
         TradeAction tradeAction = new TradeAction();
         tradeAction.orderCompleted(userID, orderID);
 
-       
-        
+
+
         return order;
     }
 
@@ -366,25 +345,25 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             Root<OrderDataBean> orders = criteriaQuery.from(OrderDataBean.class);
             criteriaQuery.select(orders);
             criteriaQuery.where(
-              criteriaBuilder.equal(orders.get("orderStatus"), 
+              criteriaBuilder.equal(orders.get("orderStatus"),
               criteriaBuilder.parameter(String.class, "p_status")),
               criteriaBuilder.equal(orders.get("account").get("profile").get("userID"),
               criteriaBuilder.parameter(String.class, "p_userid")));
-            
+
             TypedQuery<OrderDataBean> q = entityManager.createQuery(criteriaQuery);
             q.setParameter("p_status", "closed");
             q.setParameter("p_userid", userID);
             List<OrderDataBean> results = q.getResultList();
-            
+
             Iterator<OrderDataBean> itr = results.iterator();
-            
+
             // Spin through the orders to remove or mark completed
             while (itr.hasNext()) {
                 OrderDataBean order = itr.next();
-                // TODO: Investigate ConncurrentModification Exceptions                                
+                // TODO: Investigate ConncurrentModification Exceptions
                 if (TradeConfig.getLongRun()) {
                     //Added this for Longruns (to prevent orderejb growth)
-                    entityManager.remove(order); 
+                    entityManager.remove(order);
                 }
                 else {
                     order.setOrderStatus("completed");
@@ -392,10 +371,10 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             }
 
             return results;
-            
+
         } catch (Exception e) {
             Log.error("TradeSLSBBean.getClosedOrders", e);
-            throw new EJBException("TradeSLSBBean.getClosedOrders - error", e);
+            throw new RuntimeException("TradeSLSBBean.getClosedOrders - error", e);
         }
     }
 
@@ -410,7 +389,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             return quote;
         } catch (Exception e) {
             Log.error("TradeSLSBBean:createQuote -- exception creating Quote", e);
-            throw new EJBException(e);
+            throw new RuntimeException(e);
         }
     }
 
@@ -429,7 +408,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             Log.trace("TradeSLSBBean:getAllQuotes");
         }
 
-        TypedQuery<QuoteDataBean> query = entityManager.createNamedQuery("quoteejb.allQuotes",QuoteDataBean.class);
+        TypedQuery<QuoteDataBean> query = entityManager.createNamedQuery("quoteejb.allQuotes", QuoteDataBean.class);
         return query.getResultList();
     }
 
@@ -443,7 +422,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             Log.trace("TradeSLSBBean:updateQuote", symbol, changeFactor);
         }
 
-        TypedQuery<QuoteDataBean> q = entityManager.createNamedQuery("quoteejb.quoteForUpdate",QuoteDataBean.class);
+        TypedQuery<QuoteDataBean> q = entityManager.createNamedQuery("quoteejb.quoteForUpdate", QuoteDataBean.class);
         q.setParameter(1, symbol);
         QuoteDataBean quote = q.getSingleResult();
 
@@ -463,8 +442,10 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
         quote.setVolume(quote.getVolume() + sharesTraded);
         entityManager.merge(quote);
 
-        context.getBusinessObject(TradeSLSBLocal.class).publishQuotePriceChange(quote, oldPrice, changeFactor, sharesTraded);
-       
+        // cz-java-0081: Replaced context.getBusinessObject(TradeSLSBLocal.class) (jakarta.ejb.SessionContext)
+        // with direct method call since Spring manages transactions without EJB context.
+        publishQuotePriceChange(quote, oldPrice, changeFactor, sharesTraded);
+
         return quote;
     }
 
@@ -478,13 +459,13 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
         CriteriaQuery<HoldingDataBean> criteriaQuery = criteriaBuilder.createQuery(HoldingDataBean.class);
         Root<HoldingDataBean> holdings = criteriaQuery.from(HoldingDataBean.class);
         criteriaQuery.where(
-          criteriaBuilder.equal(holdings.get("account").get("profile").get("userID"), 
+          criteriaBuilder.equal(holdings.get("account").get("profile").get("userID"),
           criteriaBuilder.parameter(String.class, "p_userid")));
         criteriaQuery.select(holdings);
 
         TypedQuery<HoldingDataBean> typedQuery = entityManager.createQuery(criteriaQuery);
         typedQuery.setParameter("p_userid", userID);
-               
+
         return typedQuery.getResultList();
     }
 
@@ -507,7 +488,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
 
         // Added to populate transient field for account
         account.setProfileID(profile.getUserID());
-        
+
         return account;
     }
 
@@ -525,7 +506,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
         if (Log.doTrace()) {
             Log.trace("TradeSLSBBean:updateAccountProfileData", profileData);
         }
-             
+
         AccountProfileDataBean temp = entityManager.find(AccountProfileDataBean.class, profileData.getUserID());
         temp.setAddress(profileData.getAddress());
         temp.setPassword(profileData.getPassword());
@@ -539,13 +520,13 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
     }
 
     @Override
-    public AccountDataBean login(String userID, String password) throws RollbackException {
+    public AccountDataBean login(String userID, String password) throws Exception {
         AccountProfileDataBean profile = entityManager.find(AccountProfileDataBean.class, userID);
 
         if (profile == null) {
-            throw new EJBException("No such user: " + userID);
+            throw new RuntimeException("No such user: " + userID);
         }
-        
+
         AccountDataBean account = profile.getAccount();
 
         if (Log.doTrace()) {
@@ -555,7 +536,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
         if (Log.doTrace()) {
             Log.trace("TradeSLSBBean:login(" + userID + "," + password + ") success" + account);
         }
-        
+
         return account;
     }
 
@@ -573,7 +554,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
         if (Log.doTrace()) {
             Log.trace("TradeSLSBBean:logout(" + userID + ") success");
         }
-        
+
     }
 
     @Override
@@ -606,7 +587,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
     }
 
     @Override
-    @TransactionAttribute(TransactionAttributeType.NOT_SUPPORTED)
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.NOT_SUPPORTED)
     public RunStatsDataBean resetTrade(boolean deleteAll) throws Exception {
         if (Log.doTrace()) {
             Log.trace("TradeSLSBBean:resetTrade", deleteAll);
@@ -615,7 +596,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
         return new com.ibm.websphere.samples.daytrader.direct.TradeDirect(false).resetTrade(deleteAll);
     }
 
-    @TransactionAttribute(TransactionAttributeType.REQUIRES_NEW)
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
     public void publishQuotePriceChange(QuoteDataBean quote, BigDecimal oldPrice, BigDecimal changeFactor, double sharesTraded) {
         if (!TradeConfig.getPublishQuotePriceChange()) {
             return;
@@ -625,9 +606,9 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
         }
 
         try (JMSContext topicContext = topicConnectionFactory.createContext();) {
-    		TextMessage message = topicContext.createTextMessage();
+            TextMessage message = topicContext.createTextMessage();
 
-    		message.setStringProperty("command", "updateQuote");
+            message.setStringProperty("command", "updateQuote");
             message.setStringProperty("symbol", quote.getSymbol());
             message.setStringProperty("company", quote.getCompanyName());
             message.setStringProperty("price", quote.getPrice().toString());
@@ -640,11 +621,11 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             message.setDoubleProperty("sharesTraded", sharesTraded);
             message.setLongProperty("publishTime", System.currentTimeMillis());
             message.setText("Update Stock price for " + quote.getSymbol() + " old price = " + oldPrice + " new price = " + quote.getPrice());
-    		        		
-    		topicContext.createProducer().send(tradeStreamerTopic, message);
-    	} catch (Exception e) {
-    		 throw new EJBException(e.getMessage(), e); // pass the exception
-    	}
+
+            topicContext.createProducer().send(tradeStreamerTopic, message);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage(), e); // pass the exception
+        }
     }
 
     private OrderDataBean createOrder(AccountDataBean account, QuoteDataBean quote, HoldingDataBean holding, String orderType, double quantity) {
@@ -661,7 +642,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
             entityManager.persist(order);
         } catch (Exception e) {
             Log.error("TradeSLSBBean:createOrder -- failed to create Order. The stock/quote may not exist in the database.", e);
-            throw new EJBException("TradeSLSBBean:createOrder -- failed to create Order. Check that the symbol exists in the database.", e);
+            throw new RuntimeException("TradeSLSBBean:createOrder -- failed to create Order. Check that the symbol exists in the database.", e);
         }
         return order;
     }
@@ -683,30 +664,30 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
     }
 
     public QuoteDataBean pingTwoPhase(String symbol) throws Exception {
-      
-    	if (Log.doTrace()) {
-    		Log.trace("TradeSLSBBean:pingTwoPhase", symbol);
-    	}
-                     
-    	QuoteDataBean quoteData = null;
-            
-    	try (JMSContext queueContext = queueConnectionFactory.createContext();) {
-    		// Get a Quote and send a JMS message in a 2-phase commit
-    		quoteData = entityManager.find(QuoteDataBean.class, symbol);
-                		    		
-    		TextMessage message = queueContext.createTextMessage();
 
-    		message.setStringProperty("command", "ping");
-    		message.setLongProperty("publishTime", System.currentTimeMillis());
-    		message.setText("Ping message for queue java:comp/env/jms/TradeBrokerQueue sent from TradeSLSBBean:pingTwoPhase at " + new java.util.Date());
-    		queueContext.createProducer().send(tradeBrokerQueue, message);
-    	} catch (Exception e) {
-    		Log.error("TradeSLSBBean:pingTwoPhase -- exception caught", e);
-    	}
-            	
-    	return quoteData;
-    } 
-    
+        if (Log.doTrace()) {
+            Log.trace("TradeSLSBBean:pingTwoPhase", symbol);
+        }
+
+        QuoteDataBean quoteData = null;
+
+        try (JMSContext queueContext = queueConnectionFactory.createContext();) {
+            // Get a Quote and send a JMS message in a 2-phase commit
+            quoteData = entityManager.find(QuoteDataBean.class, symbol);
+
+            TextMessage message = queueContext.createTextMessage();
+
+            message.setStringProperty("command", "ping");
+            message.setLongProperty("publishTime", System.currentTimeMillis());
+            message.setText("Ping message for queue java:comp/env/jms/TradeBrokerQueue sent from TradeSLSBBean:pingTwoPhase at " + new java.util.Date());
+            queueContext.createProducer().send(tradeBrokerQueue, message);
+        } catch (Exception e) {
+            Log.error("TradeSLSBBean:pingTwoPhase -- exception caught", e);
+        }
+
+        return quoteData;
+    }
+
     class quotePriceComparator implements Comparator<Object> {
 
         @Override
@@ -719,7 +700,7 @@ public class TradeSLSBBean implements TradeSLSBRemote, TradeSLSBLocal {
 
     @PostConstruct
     public void postConstruct() {
-               
+
         if (Log.doTrace()) {
             Log.trace("updateQuotePrices: " + TradeConfig.getUpdateQuotePrices());
             Log.trace("publishQuotePriceChange: " + TradeConfig.getPublishQuotePriceChange());

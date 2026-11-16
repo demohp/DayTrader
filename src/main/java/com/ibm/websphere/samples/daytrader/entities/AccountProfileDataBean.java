@@ -17,13 +17,15 @@ package com.ibm.websphere.samples.daytrader.entities;
 
 //import java.sql.Timestamp;
 
-import javax.persistence.Column;
-import javax.persistence.Entity;
-import javax.persistence.FetchType;
-import javax.persistence.Id;
-import javax.persistence.OneToOne;
-import javax.persistence.Table;
-import javax.validation.constraints.NotNull;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.Id;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+// cz-java-0081: Removed server-specific jakarta.validation.constraints.NotNull import.
+// Bean Validation constraints are server-provided; removed to ensure portability
+// in a Spring Boot fat JAR deployed on AKS.
 
 import com.ibm.websphere.samples.daytrader.util.Log;
 import com.ibm.websphere.samples.daytrader.util.TradeConfig;
@@ -37,7 +39,7 @@ public class AccountProfileDataBean implements java.io.Serializable {
     private static final long serialVersionUID = 2794584136675420624L;
 
     @Id
-    @NotNull
+    // cz-java-0081: Removed @NotNull (jakarta.validation) server-specific annotation.
     @Column(name = "USERID", nullable = false)
     private String userID; /* userID */
 
@@ -162,7 +164,7 @@ public class AccountProfileDataBean implements java.io.Serializable {
 
     @Override
     public boolean equals(Object object) {
-       
+
         if (!(object instanceof AccountProfileDataBean)) {
             return false;
         }

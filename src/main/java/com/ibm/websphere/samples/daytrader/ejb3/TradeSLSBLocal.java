@@ -17,17 +17,18 @@ package com.ibm.websphere.samples.daytrader.ejb3;
 
 import java.math.BigDecimal;
 
-import javax.ejb.Local;
+// cz-java-0081: Removed server-specific @Local (jakarta.ejb) annotation and import.
+// In a portable Spring Boot application, local EJB interfaces are replaced by
+// plain Java interfaces injected via Spring @Autowired.
 
 import com.ibm.websphere.samples.daytrader.TradeServices;
 import com.ibm.websphere.samples.daytrader.entities.QuoteDataBean;
 
 
-@Local
 public interface TradeSLSBLocal extends TradeServices {
     public double investmentReturn(double investment, double NetValue) throws Exception;
-    
+
     public QuoteDataBean pingTwoPhase(String symbol) throws Exception;
-    
+
     public void publishQuotePriceChange(QuoteDataBean quote, BigDecimal oldPrice, BigDecimal changeFactor, double sharesTraded);
 }
