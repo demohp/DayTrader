@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: daytrader-ee7-ejb
+  namespace: daytrader-ee7-ejb
+  labels:
+    app: daytrader-ee7-ejb
+    version: "1.0-SNAPSHOT"
+    component: ejb-module
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: daytrader-ee7-ejb
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: daytrader-ee7-ejb
+        version: "1.0-SNAPSHOT"
+    spec:
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        fsGroup: 1001
+      containers:
+        - name: daytrader-ee7-ejb
+          image: "{{IMAGE_URI}}"
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          env:
+            # JVM Options
+            - name: JAVA_OPTS
+              value: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UnlockExperimentalVMOptions -Djava.security.egd=file:/dev/./urandom -Dfile.encoding=UTF-8 -Duser.timezone=UTC"
+            - name: TZ
+              value: "UTC"
+            # Database configuration
+            - name: DB_URL
+              value: "{{DB_URL}}"
+            - name: DB_USER
+              value: "{{DB_USER}}"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: daytrader-secrets
+                  key: db-password
+                  optional: true
+            - name: DB_DRIVER
+              value: "{{DB_DRIVER}}"
+            # JMS Queue configuration
+            - name: JMS_QUEUE_CONNECTION_FACTORY_CLASS
+              value: "{{JMS_QUEUE_CONNECTION_FACTORY_CLASS}}"
+            - name: JMS_QUEUE_CONNECTION_FACTORY_URL
+              value: "{{JMS_QUEUE_CONNECTION_FACTORY_URL}}"
+            - name: JMS_BROKER_QUEUE_CLASS
+              value: "{{JMS_BROKER_QUEUE_CLASS}}"
+            - name: JMS_BROKER_QUEUE_NAME
+              value: "{{JMS_BROKER_QUEUE_NAME}}"
+            # JMS Topic configuration
+            - name: JMS_TOPIC_CONNECTION_FACTORY_CLASS
+              value: "{{JMS_TOPIC_CONNECTION_FACTORY_CLASS}}"
+            - name: JMS_TOPIC_CONNECTION_FACTORY_URL
+              value: "{{JMS_TOPIC_CONNECTION_FACTORY_URL}}"
+            - name: JMS_STREAMER_TOPIC_CLASS
+              value: "{{JMS_STREAMER_TOPIC_CLASS}}"
+            - name: JMS_STREAMER_TOPIC_NAME
+              value: "{{JMS_STREAMER_TOPIC_NAME}}"
+            # Redis configuration (Azure Cache for Redis)
+            - name: REDIS_HOST
+              value: "{{REDIS_HOST}}"
+            - name: REDIS_PORT
+              value: "{{REDIS_PORT}}"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 3
+            successThreshold: 1
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/config
+              readOnly: true
+      volumes:
+        - name: config-volume
+          configMap:
+            name: daytrader-config
+            optional: true

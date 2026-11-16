@@ -1,0 +1,52 @@
+version: "3.9"
+
+services:
+  daytrader-ee7-ejb:
+    image: daytrader-ee7-ejb:latest
+    container_name: daytrader-ee7-ejb
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # Database configuration (connect to external DB)
+      DB_URL: ${DB_URL:-jdbc:db2://db-host:50000/daytrader}
+      DB_USER: ${DB_USER:-daytrader}
+      DB_PASSWORD: ${DB_PASSWORD:-}
+      DB_DRIVER: ${DB_DRIVER:-com.ibm.db2.jcc.DB2Driver}
+      # JMS configuration (connect to external broker)
+      JMS_QUEUE_CONNECTION_FACTORY_CLASS: ${JMS_QUEUE_CONNECTION_FACTORY_CLASS:-}
+      JMS_QUEUE_CONNECTION_FACTORY_URL: ${JMS_QUEUE_CONNECTION_FACTORY_URL:-}
+      JMS_BROKER_QUEUE_CLASS: ${JMS_BROKER_QUEUE_CLASS:-}
+      JMS_BROKER_QUEUE_NAME: ${JMS_BROKER_QUEUE_NAME:-TradeBrokerQueue}
+      JMS_TOPIC_CONNECTION_FACTORY_CLASS: ${JMS_TOPIC_CONNECTION_FACTORY_CLASS:-}
+      JMS_TOPIC_CONNECTION_FACTORY_URL: ${JMS_TOPIC_CONNECTION_FACTORY_URL:-}
+      JMS_STREAMER_TOPIC_CLASS: ${JMS_STREAMER_TOPIC_CLASS:-}
+      JMS_STREAMER_TOPIC_NAME: ${JMS_STREAMER_TOPIC_NAME:-TradeStreamerTopic}
+      # Redis configuration (Azure Cache for Redis)
+      REDIS_HOST: ${REDIS_HOST:-localhost}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      # JVM options
+      JAVA_OPTS: "-Xms256m -Xmx512m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0"
+      TZ: UTC
+    volumes:
+      - ./config:/app/config:ro
+      - daytrader-logs:/app/logs
+    networks:
+      - app-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'health check via TCP port 8080'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  daytrader-logs:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge

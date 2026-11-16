@@ -1,0 +1,72 @@
+# Docker ignore file for daytrader-ee7-ejb Maven project
+# Excludes build artifacts, IDE files, and wrapper scripts
+
+# Maven build output
+target/
+
+# Maven wrapper files (NEVER copy into Docker - use system mvn)
+mvnw
+mvnw.cmd
+.mvn/
+
+# Gradle wrapper files (if present)
+gradlew
+gradlew.bat
+gradle/wrapper/
+.gradle/
+
+# Version control
+.git/
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+.classpath
+.project
+.settings/
+*.swp
+*.swo
+*~
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Documentation
+*.md
+docs/
+
+# Test files
+src/test/
+
+# CI/CD configuration
+.github/
+.travis.yml
+Jenkinsfile
+azure-pipelines.yml
+
+# Docker files (avoid recursive copy)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Scripts (not needed in image)
+scripts/
+
+# Kubernetes manifests (not needed in image)
+kubernetes/
+
+# Log files
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
